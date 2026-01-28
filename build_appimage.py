@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Build script for Linux AppImage
+Works on Alpine Linux and other distributions
 """
 
 import subprocess
@@ -8,9 +9,110 @@ import sys
 import os
 import shutil
 import urllib.request
+import struct
+import tempfile
+
+def detect_distro():
+    """Detect Linux distribution"""
+    if os.path.exists("/etc/alpine-release"):
+        return "alpine"
+    if os.path.exists("/etc/debian_version"):
+        return "debian"
+    if os.path.exists("/etc/arch-release"):
+        return "arch"
+    return "unknown"
+
+def check_command(cmd):
+    """Check if a command exists"""
+    result = subprocess.run(["which", cmd], capture_output=True)
+    return result.returncode == 0
+
+def create_appimage_runtime():
+    """Download or create AppImage runtime"""
+    runtime_path = "tools/runtime-x86_64"
+    os.makedirs("tools", exist_ok=True)
+    
+    if os.path.exists(runtime_path):
+        return runtime_path
+    
+    print("Downloading AppImage runtime...")
+    # Try to download pre-built runtime
+    urls = [
+        "https://github.com/AppImage/AppImageKit/releases/download/continuous/runtime-x86_64",
+        "https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-x86_64",
+    ]
+    
+    for url in urls:
+        try:
+            urllib.request.urlretrieve(url, runtime_path)
+            os.chmod(runtime_path, 0o755)
+            print(f"Downloaded runtime from {url}")
+            return runtime_path
+        except Exception as e:
+            print(f"Failed to download from {url}: {e}")
+            continue
+    
+    return None
+
+def create_appimage_manually(appdir, output_path):
+    """Create AppImage manually without appimagetool"""
+    
+    print("Creating AppImage manually...")
+    
+    # Get runtime
+    runtime_path = create_appimage_runtime()
+    if not runtime_path:
+        print("ERROR: Could not get AppImage runtime")
+        return False
+    
+    # Create squashfs image
+    sqfs_path = "build/AppDir.squashfs"
+    os.makedirs("build", exist_ok=True)
+    
+    # Remove old squashfs
+    if os.path.exists(sqfs_path):
+        os.remove(sqfs_path)
+    
+    # Build squashfs using mksquashfs
+    if check_command("mksquashfs"):
+        cmd = [
+            "mksquashfs", appdir, sqfs_path,
+            "-root-owned", "-noappend", "-comp", "xz",
+            "-Xdict-size", "100%"
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"mksquashfs failed: {result.stderr}")
+            return False
+    else:
+        print("ERROR: mksquashfs not found. Install squashfs-tools.")
+        return False
+    
+    # Combine runtime + squashfs
+    with open(runtime_path, 'rb') as f:
+        runtime_data = f.read()
+    
+    with open(sqfs_path, 'rb') as f:
+        sqfs_data = f.read()
+    
+    # Create AppImage
+    with open(output_path, 'wb') as f:
+        f.write(runtime_data)
+        f.write(sqfs_data)
+    
+    # Make executable
+    os.chmod(output_path, 0o755)
+    
+    # Cleanup
+    os.remove(sqfs_path)
+    
+    return True
 
 def build_appimage():
     """Build AppImage package"""
+    
+    distro = detect_distro()
+    print(f"Detected distribution: {distro}")
     
     # Create AppDir structure
     appdir = "build/AppDir"
@@ -32,7 +134,7 @@ def build_appimage():
     shutil.copy("pygenius_desktop.py", f"{appdir}/usr/share/pygenius/")
     shutil.copy("pygenius", f"{appdir}/usr/share/pygenius/")
     
-    # Create AppRun script (entry point)
+    # Create AppRun script
     apprun = """#!/bin/bash
 # AppRun script for PyGenius AI AppImage
 
@@ -68,37 +170,29 @@ X-AppImage-Arch=x86_64
         f.write(desktop_entry)
     shutil.copy(f"{appdir}/pygenius.desktop", f"{appdir}/usr/share/applications/")
     
-    # Create a simple icon (we'll use Python logo as base)
-    # For now, create a placeholder or copy if exists
-    icon_created = False
-    if os.path.exists("pygenius.png"):
-        shutil.copy("pygenius.png", f"{appdir}/pygenius.png")
-        shutil.copy("pygenius.png", f"{appdir}/usr/share/icons/hicolor/256x256/apps/")
-        icon_created = True
-    elif os.path.exists("pygenius.svg"):
-        shutil.copy("pygenius.svg", f"{appdir}/pygenius.svg")
-        icon_created = True
-    
-    if not icon_created:
-        # Create a simple text icon placeholder
-        print("Note: No icon found. Creating placeholder...")
-        # We'll use ImageMagick or create a simple one with Python
+    # Create icon
+    try:
+        # Try to create a simple icon with PIL
         try:
-            from PIL import Image, ImageDraw, ImageFont
-            img = Image.new('RGBA', (256, 256), (30, 30, 30, 255))
-            draw = ImageDraw.Draw(img)
-            # Draw a simple Python-like logo
-            draw.ellipse([40, 40, 120, 120], fill=(55, 118, 171, 255))  # Blue
-            draw.ellipse([136, 136, 216, 216], fill=(255, 210, 63, 255))  # Yellow
-            draw.text((80, 160), "Py", fill=(255, 255, 255, 255))
-            img.save(f"{appdir}/pygenius.png")
-            shutil.copy(f"{appdir}/pygenius.png", f"{appdir}/usr/share/icons/hicolor/256x256/apps/")
-            icon_created = True
+            from PIL import Image, ImageDraw
         except ImportError:
-            # Just create an empty file as placeholder
-            open(f"{appdir}/pygenius.png", "w").close()
+            print("Installing Pillow for icon creation...")
+            subprocess.run([sys.executable, "-m", "pip", "install", "Pillow", "--break-system-packages"], 
+                          capture_output=True)
+            from PIL import Image, ImageDraw
+        
+        img = Image.new('RGBA', (256, 256), (30, 30, 30, 255))
+        draw = ImageDraw.Draw(img)
+        draw.ellipse([40, 40, 120, 120], fill=(55, 118, 171, 255))
+        draw.ellipse([136, 136, 216, 216], fill=(255, 210, 63, 255))
+        img.save(f"{appdir}/pygenius.png")
+        shutil.copy(f"{appdir}/pygenius.png", f"{appdir}/usr/share/icons/hicolor/256x256/apps/")
+    except Exception as e:
+        print(f"Could not create icon: {e}")
+        # Create empty placeholder
+        open(f"{appdir}/pygenius.png", "w").close()
     
-    # Create AppStream metadata (required for Flathub)
+    # Create AppStream metadata
     appdata = """<?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
   <id>ai.pygenius.desktop</id>
@@ -137,50 +231,48 @@ X-AppImage-Arch=x86_64
     with open(f"{appdir}/usr/share/metainfo/ai.pygenius.appdata.xml", "w") as f:
         f.write(appdata)
     
-    # Download appimagetool if not present
+    # Create release directory
+    os.makedirs("release/linux", exist_ok=True)
+    appimage_file = "release/linux/PyGeniusAI-x86_64.AppImage"
+    
+    # Try different methods to build AppImage
+    success = False
+    
+    # Method 1: Try appimagetool if available and compatible
     appimagetool = "tools/appimagetool-x86_64.AppImage"
-    os.makedirs("tools", exist_ok=True)
-    
-    if not os.path.exists(appimagetool):
-        print("Downloading appimagetool...")
-        url = "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
-        try:
-            urllib.request.urlretrieve(url, appimagetool)
-            os.chmod(appimagetool, 0o755)
-        except Exception as e:
-            print(f"Failed to download appimagetool: {e}")
-            print("Please install appimagetool manually")
-            return False
-    
-    # Build the AppImage
-    print("Building AppImage...")
-    env = os.environ.copy()
-    env["ARCH"] = "x86_64"
-    
-    result = subprocess.run(
-        [appimagetool, appdir],
-        capture_output=True,
-        text=True,
-        env=env
-    )
-    
-    if result.returncode == 0:
-        # Move to release directory
-        os.makedirs("release/linux", exist_ok=True)
-        appimage_file = "PyGeniusAI-x86_64.AppImage"
-        if os.path.exists(appimage_file):
-            shutil.move(appimage_file, f"release/linux/{appimage_file}")
+    if check_command(appimagetool) or (os.path.exists(appimagetool) and os.access(appimagetool, os.X_OK)):
+        print("Trying appimagetool...")
+        env = os.environ.copy()
+        env["ARCH"] = "x86_64"
         
+        result = subprocess.run(
+            [appimagetool, appdir, appimage_file],
+            capture_output=True,
+            text=True,
+            env=env
+        )
+        if result.returncode == 0:
+            success = True
+        else:
+            print(f"appimagetool failed: {result.stderr}")
+    
+    # Method 2: Manual creation
+    if not success:
+        print("Trying manual AppImage creation...")
+        success = create_appimage_manually(appdir, appimage_file)
+    
+    if success:
         print("\n" + "="*50)
         print("AppImage built successfully!")
         print("="*50)
-        print(f"AppImage: release/linux/{appimage_file}")
-        print(f"\nTo run: chmod +x {appimage_file} && ./{appimage_file}")
+        print(f"AppImage: {appimage_file}")
+        print(f"\nTo run: chmod +x {appimage_file} && {appimage_file}")
         return True
     else:
         print("Build failed!")
-        print(result.stdout)
-        print(result.stderr)
+        print("\nTroubleshooting:")
+        print("  - Install squashfs-tools: sudo apk add squashfs-tools")
+        print("  - Or install on Debian/Ubuntu: sudo apt install squashfs-tools")
         return False
 
 if __name__ == "__main__":

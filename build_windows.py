@@ -1,26 +1,70 @@
 #!/usr/bin/env python3
 """
 Build script for Windows executable
+Can run on Windows natively or via Wine on Linux
 """
 
 import subprocess
 import sys
 import os
 import shutil
+import platform
+
+def is_windows():
+    """Check if running on Windows"""
+    return sys.platform == "win32"
+
+def is_wine_available():
+    """Check if Wine is available"""
+    result = subprocess.run(["which", "wine"], capture_output=True)
+    return result.returncode == 0
+
+def install_package(package):
+    """Install a Python package with fallbacks"""
+    
+    # Try with --break-system-packages first (for modern distros)
+    for extra_arg in [["--break-system-packages"], ["--user"], []]:
+        cmd = [sys.executable, "-m", "pip", "install"] + extra_arg + [package]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode == 0:
+            return True
+    
+    return False
 
 def build_windows_exe():
     """Build Windows executable using PyInstaller"""
     
+    # Check if we're on Windows or have Wine
+    if not is_windows():
+        print("WARNING: Not running on Windows.")
+        print("Windows .exe can only be built on Windows or using Wine.")
+        
+        if is_wine_available():
+            print("Wine is available. You could try:")
+            print("  wine python build_windows.py")
+        else:
+            print("\nOptions:")
+            print("  1. Run this on a Windows machine")
+            print("  2. Install Wine: sudo apk add wine")
+            print("  3. Use GitHub Actions (automated on push)")
+        
+        print("\nSkipping Windows build on non-Windows system.")
+        return False
+    
     # Check if PyInstaller is installed
     try:
         import PyInstaller
+        print("PyInstaller already installed")
     except ImportError:
         print("Installing PyInstaller...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "pyinstaller"])
+        if not install_package("pyinstaller"):
+            print("ERROR: Could not install PyInstaller")
+            return False
     
     # Install requests
     print("Installing requests...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "requests"])
+    if not install_package("requests"):
+        print("WARNING: Could not install requests")
     
     # Clean previous builds
     for folder in ['build', 'dist']:
