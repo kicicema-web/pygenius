@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=PyGenius AI
+Comment=Python coding assistant with AI-powered features
+Exec=pygenius
+Type=Application
+Icon=ai.pygenius
+Categories=Development;IDE;Education;
+Terminal=false
+StartupNotify=true
+MimeType=text/x-python;

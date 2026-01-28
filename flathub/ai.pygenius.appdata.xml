@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>ai.pygenius.desktop</id>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <name>PyGenius AI</name>
+  <summary>Python coding assistant with AI-powered features</summary>
+  <description>
+    <p>
+      PyGenius AI is a desktop application for Python coding with AI-powered features.
+      It provides a complete development environment for learning and writing Python code.
+    </p>
+    <p>Features include:</p>
+    <ul>
+      <li>Code editor with syntax highlighting and line numbers</li>
+      <li>Built-in Python console for running code in real-time</li>
+      <li>AI Tutor powered by OpenRouter API for answering Python questions</li>
+      <li>Bug detection and code analysis</li>
+      <li>Code optimization suggestions</li>
+      <li>Dark theme for comfortable coding sessions</li>
+      <li>File operations (New, Open, Save, Save As)</li>
+      <li>Keyboard shortcuts for common operations</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">ai.pygenius.desktop</launchable>
+  <screenshots>
+    <screenshot type="default">
+      <caption>PyGenius AI main window with code editor</caption>
+    </screenshot>
+  </screenshots>
+  <url type="homepage">https://github.com/kicicema-web/pygenius</url>
+  <url type="bugtracker">https://github.com/kicicema-web/pygenius/issues</url>
+  <developer_name>Kicicema Web</developer_name>
+  <update_contact>kicicema.web@gmail.com</update_contact>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="1.0.0" date="2024-01-28">
+      <description>
+        <p>Initial release of PyGenius AI Desktop</p>
+        <ul>
+          <li>Code editor with syntax highlighting</li>
+          <li>Integrated Python console</li>
+          <li>AI Tutor integration</li>
+          <li>Bug detection and optimization features</li>
+        </ul>
+      </description>
+    </release>
+  </releases>
+</component>

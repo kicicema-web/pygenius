@@ -1,0 +1,48 @@
+app-id: ai.pygenius.desktop
+runtime: org.freedesktop.Platform
+runtime-version: '23.08'
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.python3
+command: pygenius
+finish-args:
+  - --share=ipc
+  - --socket=x11
+  - --socket=wayland
+  - --share=network
+  - --filesystem=home
+  - --filesystem=xdg-documents
+  - --device=dri
+
+modules:
+  - name: python3-requests
+    buildsystem: simple
+    build-commands:
+      - pip3 install --prefix=/app requests==2.31.0
+    sources:
+      - type: file
+        url: https://files.pythonhosted.org/packages/9d/be/10918a2eac4ae9f02f6cfe6414b7a155ccd8f7f9d1280d2917668dd1f8d4/requests-2.31.0-py3-none-any.whl
+        sha256: 58cd2187c01e70e6e26505bca751777aa9f2ee0b7f4300988b709f44e013003f
+
+  - name: pygenius
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 pygenius_desktop.py /app/share/pygenius/pygenius_desktop.py
+      - install -Dm755 pygenius /app/share/pygenius/pygenius
+      - install -Dm644 ai.pygenius.desktop /app/share/applications/ai.pygenius.desktop
+      - install -Dm644 ai.pygenius.appdata.xml /app/share/metainfo/ai.pygenius.appdata.xml
+      - |
+        cat > /app/bin/pygenius << 'EOF'
+        #!/bin/bash
+        exec python3 /app/share/pygenius/pygenius_desktop.py "$@"
+        EOF
+      - chmod +x /app/bin/pygenius
+    sources:
+      - type: file
+        path: ../pygenius_desktop.py
+      - type: file
+        path: ../pygenius
+      - type: file
+        path: ai.pygenius.desktop
+      - type: file
+        path: ai.pygenius.appdata.xml
